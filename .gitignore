@@ -1,0 +1,66 @@
+# Environment files
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# AI Models and Data
+models/
+training_data/
+*.pt
+*.bin
+*.h5
+*.pkl
+
+# API Keys and Credentials
+secrets/
+keys/
+*.key
+*.pem
+*.crt
+
+# Local Development
+node_modules/
+dist/
+build/
+.venv/
+venv/
+.envrc
+
+# IDE Specific
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-workspace
+*.sublime-project
+
+# Build Artifacts
+*.pyc
+*.pyo
+*.pyd
+*.so
+*.dll
+*.exe
+*.egg-info/
+__pycache__/
+*.class
+*.jar
+*.war
+*.ear
+*.db
+*.sqlite3
+
+# Logs and temp files
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.tmp
+*.temp
+
+# System Files
+.DS_Store
+Thumbs.db
