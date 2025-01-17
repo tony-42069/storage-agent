@@ -64,3 +64,6 @@ yarn-error.log*
 # System Files
 .DS_Store
 Thumbs.db
+
+# Implementation Documentation
+docs/implementation/

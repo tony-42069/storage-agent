@@ -51,15 +51,6 @@ The Storage Agent is an AI-powered system designed to handle customer inquiries,
 3. Set up call routing in Twilio
 4. Monitor performance through the analytics dashboard
 
-## Documentation
-Comprehensive documentation is available in the `docs/` directory:
-- [Implementation Timeline](docs/implementation/01-implementation-timeline.md)
-- [System Architecture](docs/implementation/02-system-architecture.md)
-- [Customer Experience](docs/implementation/03-customer-experience.md)
-- [Development Roadmap](docs/implementation/04-development-roadmap.md)
-- [Progress Tracking](docs/implementation/05-progress-tracking.md)
-- [Implementation Guide](docs/implementation/06-implementation-guide.md)
-
 ## Contributing
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
