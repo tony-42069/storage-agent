@@ -1,39 +1,39 @@
 version: '3.8'
 
 services:
-  api:
-    build: .
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./src:/app
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/storage_agent
-      - REDIS_URL=redis://redis:6379/0
-      - ENVIRONMENT=development
-      - DEBUG=True
-    depends_on:
-      - db
-      - redis
-
   db:
-    image: postgres:13
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: storage_agent
     ports:
       - "5432:5432"
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=storage_agent
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  redis:
-    image: redis:6
+  app:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/storage_agent
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
+      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER}
     ports:
-      - "6379:6379"
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
     volumes:
-      - redis_data:/data
+      - .:/app
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload"
 
 volumes:
   postgres_data:
-  redis_data:

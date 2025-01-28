@@ -2,7 +2,8 @@
 from functools import lru_cache
 from typing import Optional
 
-from pydantic import BaseSettings, PostgresDsn, validator
+from pydantic import PostgresDsn, field_validator
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -43,17 +44,17 @@ class Settings(BaseSettings):
     PROMETHEUS_ENABLED: bool = True
     METRICS_PORT: int = 9090
     
-    @validator("DATABASE_URL", pre=True)
+    @field_validator("DATABASE_URL", mode="before")
     def validate_database_url(cls, v: Optional[str]) -> str:
         """Validate and format database URL."""
         if not v:
             raise ValueError("DATABASE_URL is required")
         return v
     
-    class Config:
-        """Pydantic config class."""
-        case_sensitive = True
-        env_file = ".env"
+    model_config = {
+        "case_sensitive": True,
+        "env_file": ".env"
+    }
 
 
 @lru_cache()

@@ -3,8 +3,8 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from core.config import get_settings
-from routes import voice
+from src.core.config import get_settings
+from src.routes import voice
 
 settings = get_settings()
 
