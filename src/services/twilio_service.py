@@ -5,6 +5,7 @@ from twilio.rest import Client
 from twilio.base.exceptions import TwilioRestException
 
 from src.core.entities import EntityExtractor
+from src.core.conversation import ConversationEngine, Intent, Entity
 from src.services.storage_service import StorageService
 from src.utils.logger import get_logger
 
@@ -31,8 +32,6 @@ class TwilioService:
             facility_id: ID of the storage facility
             facility_api_key: API key for facility management system
         """
-        from src.core.conversation import ConversationEngine, Intent
-        
         self.client = Client(account_sid, auth_token)
         self.phone_number = phone_number
         self.auth_token = auth_token
@@ -54,18 +53,21 @@ class TwilioService:
         
         # Gather speech input
         gather = Gather(
-            input='speech',
-            action='/voice/process',
+            input='speech dtmf',
+            action='https://happy-waves-lie.loca.lt/voice/process',
             language='en-US',
             enhanced='true',
-            speech_timeout='auto'
+            speech_timeout='auto',
+            timeout=3
         )
         
-        # Initial greeting
+        # Initial greeting with DTMF instructions
         gather.say(
-            'Welcome to Storage Agent. How can I help you find the perfect storage unit today?',
+            'Welcome to Storage Agent. How can I help you find the perfect storage unit today? ' +
+            'You can speak your request, or press 1 for unit availability, 2 for pricing, or 3 for general information.',
             voice='Polly.Amy'
         )
+        gather.pause(length=1)  # Add a 1-second pause after instructions
         
         response.append(gather)
         
@@ -98,28 +100,44 @@ class TwilioService:
         entities = self.entity_extractor.extract_all(speech_result)
         logger.debug(f"Extracted entities: {entities}")
         
-        # Determine intent based on entities
+        # Determine intent based on input
         intent = self.Intent.UNKNOWN
-        if 'unit_size' in entities:
-            intent = self.Intent.AVAILABILITY
-        elif 'duration' in entities:
-            intent = self.Intent.PRICING
+        
+        # Check if this is a DTMF input (starts with "Option")
+        if speech_result.startswith("Option "):
+            try:
+                dtmf = int(speech_result.split(" ")[1])
+                if dtmf == 1:
+                    intent = self.Intent.AVAILABILITY
+                elif dtmf == 2:
+                    intent = self.Intent.PRICING
+                elif dtmf == 3:
+                    intent = self.Intent.INFORMATION
+            except (ValueError, IndexError):
+                pass
+        else:
+            # Process speech input
+            if 'unit_size' in entities:
+                intent = self.Intent.AVAILABILITY
+            elif 'duration' in entities:
+                intent = self.Intent.PRICING
             
         # Get response from conversation engine
         response_text = self.conversation_engine.process_intent(
             context.session_id,
             intent,
             confidence=1.0,
-            entities=[e for e in entities.values()]
+            entities=[Entity(type='unit_size', value=entities['unit_size'].value, confidence=1.0)] if 'unit_size' in entities else []
         )
         
         response = VoiceResponse()
         gather = Gather(
-            input='speech',
-            action='/voice/process',
+            input='speech dtmf',
+            action='https://happy-waves-lie.loca.lt/voice/process',
             language='en-US',
             enhanced='true',
-            speech_timeout='auto'
+            speech_timeout='auto',
+            timeout=3
         )
         
         # Use conversation engine's response

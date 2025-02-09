@@ -12,24 +12,22 @@ class Entity:
     confidence: float = 1.0
 
 @dataclass
-class UnitSize:
+class UnitSize(Entity):
     """Storage unit size entity"""
-    width: int
-    length: int
-    value: str
-    confidence: float = 1.0
+    type: str = "unit_size"
+    width: int = 0
+    length: int = 0
     
     @property
     def square_feet(self) -> int:
         return self.width * self.length
 
 @dataclass
-class Duration:
+class Duration(Entity):
     """Duration entity"""
-    amount: int
-    unit: str  # 'month', 'week', 'year'
-    value: str
-    confidence: float = 1.0
+    type: str = "duration"
+    amount: int = 0
+    unit: str = "month"  # 'month', 'week', 'year'
 
 class EntityExtractor:
     """Extract structured entities from natural language text"""
