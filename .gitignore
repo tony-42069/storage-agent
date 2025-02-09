@@ -67,3 +67,14 @@ Thumbs.db
 
 # Implementation Documentation
 docs/implementation/
+
+# Source Code Implementation
+src/core/
+src/models/
+src/routes/
+src/services/
+src/utils/
+src/tests/
+
+# Main Application Files
+src/main.py

@@ -1,34 +1,32 @@
-# Use Python 3.8 slim image
-FROM python:3.8-slim
+# Use Python 3.11 slim image
+FROM python:3.11-slim
 
 # Set working directory
 WORKDIR /app
 
-# Set environment variables
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    ENVIRONMENT=production \
-    PORT=8000
-
 # Install system dependencies
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        build-essential \
-        libpq-dev \
-    && apt-get clean \
+RUN apt-get update && apt-get install -y \
+    postgresql-client \
+    libpq-dev \
+    gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements file
+# Install Python packages
 COPY requirements.txt .
-
-# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy project files
-COPY src/ .
+# Copy application code
+COPY . .
+
+# Create necessary directories
+RUN mkdir -p logs
+
+# Set environment variables
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
 
 # Expose port
-EXPOSE $PORT
+EXPOSE 8000
 
-# Run the application
-CMD ["python", "main.py"]
+# Default command
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]

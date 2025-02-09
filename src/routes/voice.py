@@ -1,109 +1,97 @@
-"""Voice processing routes."""
+from fastapi import APIRouter, Request, HTTPException, Depends
 from typing import Dict
+import os
 
-from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import PlainTextResponse
+from src.services.twilio_service import TwilioService
+from src.utils.logger import get_logger
 
-from services.twilio_service import TwilioService
-from utils.voice_processor import VoiceProcessor
+logger = get_logger(__name__)
 
-router = APIRouter(prefix="/api/voice", tags=["voice"])
+router = APIRouter()
 
-# Dependencies
 def get_twilio_service() -> TwilioService:
-    """Dependency for TwilioService."""
-    return TwilioService()
-
-def get_voice_processor() -> VoiceProcessor:
-    """Dependency for VoiceProcessor."""
-    return VoiceProcessor()
-
-@router.post("/welcome", response_class=PlainTextResponse)
-async def welcome_handler(
-    request: Request,
-    twilio: TwilioService = Depends(get_twilio_service)
-) -> str:
-    """
-    Handle initial incoming calls.
-    
-    Args:
-        request: FastAPI request object
-        twilio: TwilioService instance
-        
-    Returns:
-        TwiML response as string
-    """
-    return twilio.generate_welcome_twiml()
-
-@router.post("/incoming", response_class=PlainTextResponse)
-async def incoming_call_handler(
-    request: Request,
-    twilio: TwilioService = Depends(get_twilio_service)
-) -> str:
-    """
-    Handle incoming Twilio voice calls.
-    
-    Args:
-        request: FastAPI request object
-        twilio: TwilioService instance
-        
-    Returns:
-        TwiML response as string
-    """
-    # Extract call data from request
-    form_data = await request.form()
-    call_data = dict(form_data)
-    
-    return twilio.handle_incoming_call(call_data)
-
-@router.post("/process", response_class=PlainTextResponse)
-async def process_speech_handler(
-    request: Request,
-    SpeechResult: str = Form(None),
-    twilio: TwilioService = Depends(get_twilio_service),
-    processor: VoiceProcessor = Depends(get_voice_processor)
-) -> str:
-    """
-    Process speech input from Twilio.
-    
-    Args:
-        request: FastAPI request object
-        SpeechResult: Transcribed speech from Twilio
-        twilio: TwilioService instance
-        processor: VoiceProcessor instance
-        
-    Returns:
-        TwiML response as string
-    """
-    if SpeechResult:
-        # Extract intent from speech
-        intent_data = processor.extract_intent(SpeechResult)
-        
-        # TODO: Use intent data to generate more specific responses
-        # For now, pass through to basic speech processing
-        return twilio.process_speech_input(SpeechResult)
-    
-    return twilio.process_speech_input(None)
-
-@router.post("/fallback", response_class=PlainTextResponse)
-async def fallback_handler(
-    request: Request,
-    twilio: TwilioService = Depends(get_twilio_service)
-) -> str:
-    """
-    Handle fallback for failed calls or errors.
-    
-    Args:
-        request: FastAPI request object
-        twilio: TwilioService instance
-        
-    Returns:
-        TwiML response as string
-    """
-    response = twilio.create_voice_response()
-    response.say(
-        "I apologize, but we're experiencing technical difficulties. "
-        "Please try your call again in a few moments.",
-        voice="Polly.Amy"
+    """Dependency to get configured TwilioService instance"""
+    return TwilioService(
+        account_sid=os.getenv('TWILIO_ACCOUNT_SID'),
+        auth_token=os.getenv('TWILIO_AUTH_TOKEN'),
+        phone_number=os.getenv('TWILIO_PHONE_NUMBER')
     )
-    return str(response)
+
+@router.post("/incoming")
+async def handle_incoming_call(
+    request: Request,
+    twilio: TwilioService = Depends(get_twilio_service)
+) -> Dict:
+    """
+    Handle incoming Twilio voice calls
+    
+    Args:
+        request: FastAPI request object
+        twilio: TwilioService instance
+        
+    Returns:
+        TwiML response
+    """
+    try:
+        # Get request form data
+        form_data = await request.form()
+        
+        # Validate request
+        if not twilio.validate_request(dict(form_data)):
+            logger.warning("Invalid Twilio request received")
+            raise HTTPException(status_code=400, detail="Invalid request")
+        
+        # Generate initial response
+        response = twilio.handle_incoming_call()
+        logger.info(f"Handled incoming call from {form_data.get('From')}")
+        
+        return {"twiml": response}
+        
+    except Exception as e:
+        logger.error(f"Error handling incoming call: {e}", exc_info=True)
+        return {"twiml": twilio.handle_error(e)}
+
+@router.post("/process")
+async def process_speech(
+    request: Request,
+    twilio: TwilioService = Depends(get_twilio_service)
+) -> Dict:
+    """
+    Process speech input from Twilio
+    
+    Args:
+        request: FastAPI request object
+        twilio: TwilioService instance
+        
+    Returns:
+        TwiML response
+    """
+    try:
+        # Get request form data
+        form_data = await request.form()
+        
+        # Validate request
+        if not twilio.validate_request(dict(form_data)):
+            logger.warning("Invalid Twilio request received")
+            raise HTTPException(status_code=400, detail="Invalid request")
+        
+        # Get speech result
+        speech_result = form_data.get('SpeechResult')
+        if not speech_result:
+            logger.warning("No speech result in request")
+            raise HTTPException(status_code=400, detail="No speech input")
+        
+        # Process speech and generate response
+        response = twilio.process_speech(speech_result)
+        logger.info(f"Processed speech input: {speech_result[:100]}...")
+        
+        return {"twiml": response}
+        
+    except Exception as e:
+        logger.error(f"Error processing speech: {e}", exc_info=True)
+        return {"twiml": twilio.handle_error(e)}
+
+@router.get("/health")
+async def health_check() -> Dict:
+    """Health check endpoint"""
+    return {"status": "healthy"}

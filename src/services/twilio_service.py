@@ -4,9 +4,9 @@ from twilio.twiml.voice_response import VoiceResponse, Gather
 from twilio.rest import Client
 from twilio.base.exceptions import TwilioRestException
 
-from core.entities import EntityExtractor
-from services.storage_service import StorageService
-from utils.logger import get_logger
+from src.core.entities import EntityExtractor
+from src.services.storage_service import StorageService
+from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 

@@ -29,20 +29,11 @@ class Settings(BaseSettings):
     TWILIO_AUTH_TOKEN: str
     TWILIO_PHONE_NUMBER: str
     
-    # OpenAI
-    OPENAI_API_KEY: str
-    
     # Security
-    JWT_SECRET_KEY: str
-    JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    SECRET_KEY: str = "development_secret_key"
     
-    # Redis
-    REDIS_URL: str = "redis://localhost:6379/0"
-    
-    # Monitoring
-    PROMETHEUS_ENABLED: bool = True
-    METRICS_PORT: int = 9090
+    # CORS
+    ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:8000"
     
     @field_validator("DATABASE_URL", mode="before")
     def validate_database_url(cls, v: Optional[str]) -> str:
@@ -51,9 +42,13 @@ class Settings(BaseSettings):
             raise ValueError("DATABASE_URL is required")
         return v
     
+    # Environment
+    APP_ENV: str = "development"
+    
     model_config = {
         "case_sensitive": True,
-        "env_file": ".env"
+        "env_file": ".env",
+        "extra": "allow"  # Allow extra fields from environment
     }
 
 
