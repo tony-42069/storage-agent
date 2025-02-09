@@ -33,13 +33,18 @@ async def handle_incoming_call(
         TwiML response
     """
     try:
-        # Get request form data
+        # Get request form data and headers
         form_data = await request.form()
+        signature = request.headers.get("X-Twilio-Signature", "")
         
-        # Validate request
-        if not twilio.validate_request(dict(form_data)):
+        # Validate request with signature
+        if not twilio.validate_request(
+            dict(form_data),
+            str(request.url),
+            signature
+        ):
             logger.warning("Invalid Twilio request received")
-            raise HTTPException(status_code=400, detail="Invalid request")
+            raise HTTPException(status_code=403, detail="Invalid request signature")
         
         # Generate initial response
         response = twilio.handle_incoming_call()
@@ -67,13 +72,18 @@ async def process_speech(
         TwiML response
     """
     try:
-        # Get request form data
+        # Get request form data and headers
         form_data = await request.form()
+        signature = request.headers.get("X-Twilio-Signature", "")
         
-        # Validate request
-        if not twilio.validate_request(dict(form_data)):
+        # Validate request with signature
+        if not twilio.validate_request(
+            dict(form_data),
+            str(request.url),
+            signature
+        ):
             logger.warning("Invalid Twilio request received")
-            raise HTTPException(status_code=400, detail="Invalid request")
+            raise HTTPException(status_code=403, detail="Invalid request signature")
         
         # Get speech result
         speech_result = form_data.get('SpeechResult')
@@ -82,8 +92,9 @@ async def process_speech(
             raise HTTPException(status_code=400, detail="No speech input")
         
         # Process speech and generate response
-        response = twilio.process_speech(speech_result)
-        logger.info(f"Processed speech input: {speech_result[:100]}...")
+        call_sid = form_data.get('CallSid')
+        response = twilio.process_speech(speech_result, call_sid)
+        logger.info(f"Processed speech input for call {call_sid}: {speech_result[:100]}...")
         
         return {"twiml": response}
         

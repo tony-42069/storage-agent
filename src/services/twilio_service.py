@@ -31,12 +31,17 @@ class TwilioService:
             facility_id: ID of the storage facility
             facility_api_key: API key for facility management system
         """
+        from src.core.conversation import ConversationEngine, Intent
+        
         self.client = Client(account_sid, auth_token)
         self.phone_number = phone_number
+        self.auth_token = auth_token
         self.entity_extractor = EntityExtractor()
         self.storage_service = StorageService(facility_id, facility_api_key)
+        self.conversation_engine = ConversationEngine()
+        self.Intent = Intent  # Make Intent enum available for use
         
-        logger.info("Initialized Twilio service with storage facility integration")
+        logger.info("Initialized Twilio service with conversation engine")
 
     def handle_incoming_call(self) -> str:
         """
@@ -73,21 +78,40 @@ class TwilioService:
         logger.info("Generated initial call response")
         return str(response)
 
-    def process_speech(self, speech_result: str) -> str:
+    def process_speech(self, speech_result: str, call_sid: str = None) -> str:
         """
         Process speech input and generate appropriate response
         
         Args:
             speech_result: Transcribed speech from Twilio
+            call_sid: Unique identifier for the call session
             
         Returns:
             TwiML response as string
         """
         logger.info(f"Processing speech input: {speech_result}")
         
+        # Get or create conversation context
+        context = self.conversation_engine.get_or_create_context(call_sid or "default")
+        
         # Extract entities from speech
         entities = self.entity_extractor.extract_all(speech_result)
         logger.debug(f"Extracted entities: {entities}")
+        
+        # Determine intent based on entities
+        intent = self.Intent.UNKNOWN
+        if 'unit_size' in entities:
+            intent = self.Intent.AVAILABILITY
+        elif 'duration' in entities:
+            intent = self.Intent.PRICING
+            
+        # Get response from conversation engine
+        response_text = self.conversation_engine.process_intent(
+            context.session_id,
+            intent,
+            confidence=1.0,
+            entities=[e for e in entities.values()]
+        )
         
         response = VoiceResponse()
         gather = Gather(
@@ -98,73 +122,8 @@ class TwilioService:
             speech_timeout='auto'
         )
         
-        # Generate response based on extracted entities
-        if 'unit_size' in entities:
-            unit_size = entities['unit_size']
-            available_units = self.storage_service.get_available_units(unit_size.value)
-            
-            if available_units:
-                unit = available_units[0]  # Get the first available unit of requested size
-                features = ", ".join(unit.features[:2])  # List first 2 features
-                gather.say(
-                    f'Great! We have a {unit_size.value} unit available for ${unit.price:.2f} per month. '
-                    f'This unit features {features}. '
-                    'Would you like to reserve it?',
-                    voice='Polly.Amy'
-                )
-            else:
-                # Suggest alternative sizes
-                all_units = self.storage_service.get_available_units()
-                if all_units:
-                    sizes = ", ".join(set(u.size for u in all_units[:2]))
-                    gather.say(
-                        f'I apologize, but we don\'t have any {unit_size.value} units available right now. '
-                        f'However, we do have {sizes} units available. '
-                        'Would you like to hear about those options?',
-                        voice='Polly.Amy'
-                    )
-                else:
-                    gather.say(
-                        'I apologize, but we don\'t have any units available at the moment. '
-                        'Would you like me to take your contact information for when one becomes available?',
-                        voice='Polly.Amy'
-                    )
-        elif 'duration' in entities:
-            duration = entities['duration']
-            # Get all available units for price comparison
-            available_units = self.storage_service.get_available_units()
-            if available_units:
-                # Sort by price and get cheapest option
-                cheapest = min(available_units, key=lambda u: u.price)
-                total_price = cheapest.price * duration.amount
-                gather.say(
-                    f'For a {duration.value} rental, our prices start at ${cheapest.price:.2f} per month '
-                    f'for a {cheapest.size} unit, totaling ${total_price:.2f}. '
-                    'What size unit are you interested in?',
-                    voice='Polly.Amy'
-                )
-            else:
-                gather.say(
-                    'I understand you\'re looking for a {duration.value} rental. '
-                    'What size unit are you interested in? For example, a 10 by 10 unit?',
-                    voice='Polly.Amy'
-                )
-        else:
-            # Get available sizes for suggestions
-            available_units = self.storage_service.get_available_units()
-            if available_units:
-                sizes = ", ".join(sorted(set(u.size for u in available_units[:3])))
-                gather.say(
-                    f'We currently have {sizes} units available. '
-                    'What size would work best for you?',
-                    voice='Polly.Amy'
-                )
-            else:
-                gather.say(
-                    'Could you tell me what size storage unit you\'re looking for? '
-                    'For example, a 10 by 10 unit?',
-                    voice='Polly.Amy'
-                )
+        # Use conversation engine's response
+        gather.say(response_text, voice='Polly.Amy')
         
         response.append(gather)
         
@@ -197,28 +156,39 @@ class TwilioService:
         
         return str(response)
 
-    def validate_request(self, request_data: Dict) -> bool:
+    def validate_request(self, request_data: Dict, request_url: str, signature: str) -> bool:
         """
-        Validate incoming Twilio request
+        Validate incoming Twilio request using request signature
         
         Args:
             request_data: Request parameters from Twilio
+            request_url: Full URL of the request
+            signature: X-Twilio-Signature header value
             
         Returns:
             True if request is valid, False otherwise
         """
         try:
+            from twilio.request_validator import RequestValidator
+            
             # Basic validation of required fields
             required_fields = ['CallSid', 'From']
             if not all(field in request_data for field in required_fields):
                 logger.warning("Missing required fields in Twilio request")
                 return False
             
-            # Additional validation could be added here
-            # - Validate caller phone number format
-            # - Check if caller is in allowed list
-            # - Verify request signature
+            # Validate request signature
+            validator = RequestValidator(self.auth_token)
+            is_valid = validator.validate(
+                request_url,
+                request_data,
+                signature
+            )
             
+            if not is_valid:
+                logger.warning("Invalid Twilio request signature")
+                return False
+                
             return True
             
         except Exception as e:
