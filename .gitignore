@@ -78,3 +78,7 @@ src/tests/
 
 # Main Application Files
 src/main.py
+
+# Utility Scripts
+check-phone.js
+update-phone.js
