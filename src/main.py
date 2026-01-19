@@ -1,5 +1,8 @@
 """Main application entry point."""
 import os
+import time
+import uvicorn
+from fastapi import FastAPI, Request
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,6 +10,9 @@ from contextlib import asynccontextmanager
 
 from src.core.config import get_settings
 from src.routes import voice
+from src.routes import health
+from src.utils.logger import get_logger, init_app_logging
+from src.utils.metrics import record_request, record_error
 from src.utils.logger import get_logger
 from src.db.session import init_database, close_async_engine
 
@@ -18,6 +24,8 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager for startup and shutdown events."""
+    init_app_logging(settings.APP_ENV)
+    
     startup_errors = []
     
     required_env_vars = [
@@ -73,6 +81,33 @@ app.add_middleware(
 
 # Include routers
 app.include_router(voice.router, prefix="/voice", tags=["voice"])
+app.include_router(health.router, prefix="", tags=["health"])
+
+
+@app.middleware("http")
+async def metrics_middleware(request: Request, call_next):
+    """Middleware to collect request metrics."""
+    start_time = time.time()
+    
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+    except Exception as e:
+        status_code = 500
+        record_error(type(e).__name__)
+        raise
+    finally:
+        duration_ms = int((time.time() - start_time) * 1000)
+        record_request(
+            endpoint=request.url.path,
+            method=request.method,
+            status_code=status_code,
+            duration_ms=duration_ms
+        )
+    
+    return response
+
+
 
 
 @app.get("/")

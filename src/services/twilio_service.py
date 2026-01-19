@@ -8,6 +8,21 @@ from src.core.entities import EntityExtractor
 from src.core.conversation import ConversationEngine, Intent, Entity
 from src.services.storage_service import StorageService
 from src.utils.logger import get_logger
+from src.utils.metrics import start_call, end_call, record_call_input, record_call_error
+
+logger = get_logger(__name__)
+
+
+from typing import Dict, Optional
+import logging
+from twilio.twiml.voice_response import VoiceResponse, Gather
+from twilio.rest import Client
+from twilio.base.exceptions import TwilioRestException
+
+from src.core.entities import EntityExtractor
+from src.core.conversation import ConversationEngine, Intent, Entity
+from src.services.storage_service import StorageService
+from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -20,6 +35,7 @@ class TwilioService:
         auth_token: str,
         phone_number: str,
         facility_id: str = "default",
+        facility_api_key: str = "default"
         facility_api_key: str = "default",
         voice_action_url: str = ""
     ):
@@ -37,6 +53,33 @@ class TwilioService:
         self.client = Client(account_sid, auth_token)
         self.phone_number = phone_number
         self.auth_token = auth_token
+        self.entity_extractor = EntityExtractor()
+        self.storage_service = StorageService(facility_id, facility_api_key)
+        self.conversation_engine = ConversationEngine()
+        self.Intent = Intent
+        
+        self.voice_action_url = ""  # Will be set if provided
+        
+        logger.info("Initialized Twilio service with conversation engine")
+    
+    def set_voice_action_url(self, url: str):
+        """Set the voice action URL for TwiML responses."""
+        self.voice_action_url = url
+    
+    def handle_incoming_call(self, call_sid: str = None) -> str:
+        """
+        Handle initial incoming call and gather user input.
+        
+        Args:
+            call_sid: Optional call SID for metrics tracking
+            
+        Returns:
+            TwiML response as string
+        """
+        if call_sid:
+            start_call(call_sid)
+        
+        response = VoiceResponse()
         self.voice_action_url = voice_action_url
         self.entity_extractor = EntityExtractor()
         self.storage_service = StorageService(facility_id, facility_api_key)
@@ -85,6 +128,57 @@ class TwilioService:
         logger.info("Generated initial call response")
         return str(response)
 
+    def process_speech(self, speech_result: str, call_sid: str = None) -> str:
+        """
+        Process speech input and generate appropriate response.
+        
+        Args:
+            speech_result: Transcribed speech from Twilio
+            call_sid: Unique identifier for the call session
+            
+        Returns:
+            TwiML response as string
+        """
+        logger.info(f"Processing speech input: {speech_result}")
+        
+        # Determine input type for metrics
+        input_type = "speech" if not speech_result.startswith("Option ") else "dtmf"
+        
+        # Get or create conversation context
+        context = self.conversation_engine.get_or_create_context(call_sid or "default")
+        
+        # Extract entities from speech
+        entities = self.entity_extractor.extract_all(speech_result)
+        logger.debug(f"Extracted entities: {entities}")
+        
+        # Determine intent based on input
+        intent = self.Intent.UNKNOWN
+        
+        # Check if this is a DTMF input (starts with "Option")
+        if speech_result.startswith("Option "):
+            try:
+                dtmf = int(speech_result.split(" ")[1])
+                if dtmf == 1:
+                    intent = self.Intent.AVAILABILITY
+                elif dtmf == 2:
+                    intent = self.Intent.PRICING
+                elif dtmf == 3:
+                    intent = self.Intent.INFORMATION
+            except (ValueError, IndexError):
+                pass
+        else:
+            # Process speech input
+            if 'unit_size' in entities:
+                intent = self.Intent.AVAILABILITY
+            elif 'duration' in entities:
+                intent = self.Intent.PRICING
+        
+        # Record input for metrics
+        if call_sid:
+            record_call_input(call_sid, input_type, intent.value if intent else None)
+            record_conversation(call_sid, intent.value if intent else None)
+        
+        # Get response from conversation engine
     def process_speech(self, speech_result: str, call_sid: str = None) -> str:
         """
         Process speech input and generate appropriate response
@@ -159,17 +253,22 @@ class TwilioService:
         
         return str(response)
 
-    def handle_error(self, error: Exception) -> str:
+    def handle_error(self, error: Exception, call_sid: str = None) -> str:
         """
-        Generate error response for the user
+        Generate error response for the user.
         
         Args:
             error: Exception that occurred
+            call_sid: Optional call SID for metrics tracking
             
         Returns:
             TwiML response as string
         """
         logger.error(f"Error in call processing: {str(error)}", exc_info=True)
+        
+        if call_sid:
+            record_call_error(call_sid)
+            record_error(type(error).__name__, component="twilio")
         
         response = VoiceResponse()
         response.say(
