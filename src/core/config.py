@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     TWILIO_ACCOUNT_SID: str
     TWILIO_AUTH_TOKEN: str
     TWILIO_PHONE_NUMBER: str
+    TWILIO_VOICE_ACTION_URL: str = ""
     
     # Security
     SECRET_KEY: str = "development_secret_key"

@@ -66,18 +66,13 @@ yarn-error.log*
 Thumbs.db
 
 # Implementation Documentation
-docs/implementation/
+# (Documentation is intentionally NOT ignored for version control)
 
 # Source Code Implementation
-src/core/
-src/models/
-src/routes/
-src/services/
-src/utils/
-src/tests/
+# (Source code is intentionally NOT ignored for version control)
 
 # Main Application Files
-src/main.py
+# src/main.py
 
 # Utility Scripts
 check-phone.js
