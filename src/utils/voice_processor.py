@@ -5,8 +5,8 @@ from typing import Dict, List, Optional, Tuple
 import speech_recognition as sr
 from fastapi import HTTPException
 
-from core.conversation import ConversationEngine, Entity, Intent
-from utils.logger import logger
+from src.core.conversation import ConversationEngine, Entity, Intent
+from src.utils.logger import logger
 
 
 class VoiceProcessor:
