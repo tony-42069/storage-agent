@@ -9,6 +9,8 @@ from contextlib import asynccontextmanager
 from src.core.config import get_settings
 from src.routes import voice, health
 from src.auth import routes as auth_routes
+from src.routes.v1 import router as v1_router
+from src.routes import v1 as api_v1
 from src.utils.logger import get_logger, init_app_logging
 from src.utils.metrics import record_request, record_error
 from src.utils.alerting import init_alerting, send_alert, AlertLevel
@@ -139,7 +141,8 @@ async def metrics_middleware(request: Request, call_next):
 # Include routers
 app.include_router(voice.router, prefix="/voice", tags=["voice"])
 app.include_router(health.router, prefix="", tags=["health"])
-app.include_router(auth_routes.router, prefix="/api/v1", tags=["authentication"])
+app.include_router(auth_routes.router, prefix="/api", tags=["authentication"])
+app.include_router(v1_router, prefix="/api", tags=["v1"])
 
 
 @app.get("/")
