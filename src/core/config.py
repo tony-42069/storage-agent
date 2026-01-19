@@ -28,6 +28,14 @@ class Settings(BaseSettings):
     TWILIO_ACCOUNT_SID: str
     TWILIO_AUTH_TOKEN: str
     TWILIO_PHONE_NUMBER: str
+    TWILIO_VOICE_ACTION_URL: str = ""
+    
+    # Facility API
+    FACILITY_API_URL: str = ""
+    FACILITY_API_KEY: str = ""
+    FACILITY_API_SECRET: str = ""
+    FACILITY_ID: str = "default"
+    USE_MOCK_STORAGE_API: bool = False
     
     # Security
     SECRET_KEY: str = "development_secret_key"
