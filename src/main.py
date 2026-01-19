@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from src.core.config import get_settings
 from src.routes import voice
 from src.utils.logger import get_logger
+from src.db.session import init_database, close_async_engine
 
 logger = get_logger(__name__)
 
@@ -38,6 +39,17 @@ async def lifespan(app: FastAPI):
         raise RuntimeError(f"Configuration validation failed: {error_msg}")
     
     logger.info(f"Application started in {settings.APP_ENV} mode")
+    
+    if settings.APP_ENV != "testing":
+        try:
+            init_database()
+            logger.info("Database initialized successfully")
+        except Exception as e:
+            logger.warning(f"Database initialization failed (will retry on first request): {e}")
+    
+    yield
+    logger.info("Application shutdown")
+    await close_async_engine()
     yield
     logger.info("Application shutdown")
 
@@ -49,6 +61,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
 # CORS middleware configuration
 app.add_middleware(
     CORSMiddleware,
@@ -57,6 +70,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include routers
+app.include_router(voice.router, prefix="/voice", tags=["voice"])
+
+
+@app.get("/")
+async def root():
+    """Root endpoint."""
+    return {
+        "name": settings.PROJECT_NAME,
+        "version": settings.VERSION,
+        "status": "operational"
+    }
+
+
 
 # Include routers
 app.include_router(voice.router, prefix="/voice", tags=["voice"])
@@ -79,6 +107,19 @@ async def health_check():
     
     return {
         "status": "healthy" if not missing_vars else "degraded",
+        "environment": settings.APP_ENV,
+        "config_valid": len(missing_vars) == 0,
+        "missing_config": missing_vars if missing_vars else None
+    }
+
+
+if __name__ == "__main__":
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=settings.PORT,
+        reload=settings.DEBUG
+    )
         "environment": settings.ENVIRONMENT,
         "config_valid": len(missing_vars) == 0,
         "missing_config": missing_vars if missing_vars else None
