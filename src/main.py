@@ -50,6 +50,8 @@ async def lifespan(app: FastAPI):
     yield
     logger.info("Application shutdown")
     await close_async_engine()
+    yield
+    logger.info("Application shutdown")
 
 
 app = FastAPI(
@@ -58,6 +60,7 @@ app = FastAPI(
     description="AI-powered storage facility management system",
     lifespan=lifespan,
 )
+
 
 # CORS middleware configuration
 app.add_middleware(
@@ -82,6 +85,19 @@ async def root():
     }
 
 
+
+# Include routers
+app.include_router(voice.router, prefix="/voice", tags=["voice"])
+
+@app.get("/")
+async def root():
+    """Root endpoint."""
+    return {
+        "name": settings.PROJECT_NAME,
+        "version": settings.VERSION,
+        "status": "operational"
+    }
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
@@ -96,6 +112,18 @@ async def health_check():
         "missing_config": missing_vars if missing_vars else None
     }
 
+
+if __name__ == "__main__":
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=settings.PORT,
+        reload=settings.DEBUG
+    )
+        "environment": settings.ENVIRONMENT,
+        "config_valid": len(missing_vars) == 0,
+        "missing_config": missing_vars if missing_vars else None
+    }
 
 if __name__ == "__main__":
     uvicorn.run(

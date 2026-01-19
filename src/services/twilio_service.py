@@ -20,7 +20,8 @@ class TwilioService:
         auth_token: str,
         phone_number: str,
         facility_id: str = "default",
-        facility_api_key: str = "default"
+        facility_api_key: str = "default",
+        voice_action_url: str = ""
     ):
         """
         Initialize Twilio service with credentials
@@ -31,10 +32,12 @@ class TwilioService:
             phone_number: Twilio phone number to use for calls
             facility_id: ID of the storage facility
             facility_api_key: API key for facility management system
+            voice_action_url: URL for Twilio voice webhook callbacks
         """
         self.client = Client(account_sid, auth_token)
         self.phone_number = phone_number
         self.auth_token = auth_token
+        self.voice_action_url = voice_action_url
         self.entity_extractor = EntityExtractor()
         self.storage_service = StorageService(facility_id, facility_api_key)
         self.conversation_engine = ConversationEngine()
@@ -51,10 +54,12 @@ class TwilioService:
         """
         response = VoiceResponse()
         
+        action_url = self.voice_action_url or "/voice/process"
+        
         # Gather speech input
         gather = Gather(
             input='speech dtmf',
-            action='https://happy-waves-lie.loca.lt/voice/process',
+            action=action_url,
             language='en-US',
             enhanced='true',
             speech_timeout='auto',
@@ -131,9 +136,10 @@ class TwilioService:
         )
         
         response = VoiceResponse()
+        action_url = self.voice_action_url or "/voice/process"
         gather = Gather(
             input='speech dtmf',
-            action='https://happy-waves-lie.loca.lt/voice/process',
+            action=action_url,
             language='en-US',
             enhanced='true',
             speech_timeout='auto',
