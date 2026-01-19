@@ -13,6 +13,19 @@ from src.utils.metrics import start_call, end_call, record_call_input, record_ca
 logger = get_logger(__name__)
 
 
+from typing import Dict, Optional
+import logging
+from twilio.twiml.voice_response import VoiceResponse, Gather
+from twilio.rest import Client
+from twilio.base.exceptions import TwilioRestException
+
+from src.core.entities import EntityExtractor
+from src.core.conversation import ConversationEngine, Intent, Entity
+from src.services.storage_service import StorageService
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
 class TwilioService:
     """Handle Twilio voice interactions and call processing"""
     
@@ -23,6 +36,8 @@ class TwilioService:
         phone_number: str,
         facility_id: str = "default",
         facility_api_key: str = "default"
+        facility_api_key: str = "default",
+        voice_action_url: str = ""
     ):
         """
         Initialize Twilio service with credentials
@@ -33,6 +48,7 @@ class TwilioService:
             phone_number: Twilio phone number to use for calls
             facility_id: ID of the storage facility
             facility_api_key: API key for facility management system
+            voice_action_url: URL for Twilio voice webhook callbacks
         """
         self.client = Client(account_sid, auth_token)
         self.phone_number = phone_number
@@ -64,6 +80,23 @@ class TwilioService:
             start_call(call_sid)
         
         response = VoiceResponse()
+        self.voice_action_url = voice_action_url
+        self.entity_extractor = EntityExtractor()
+        self.storage_service = StorageService(facility_id, facility_api_key)
+        self.conversation_engine = ConversationEngine()
+        self.Intent = Intent  # Make Intent enum available for use
+        
+        logger.info("Initialized Twilio service with conversation engine")
+
+    def handle_incoming_call(self) -> str:
+        """
+        Handle initial incoming call and gather user input
+        
+        Returns:
+            TwiML response as string
+        """
+        response = VoiceResponse()
+        
         action_url = self.voice_action_url or "/voice/process"
         
         # Gather speech input
@@ -145,6 +178,49 @@ class TwilioService:
             record_call_input(call_sid, input_type, intent.value if intent else None)
             record_conversation(call_sid, intent.value if intent else None)
         
+        # Get response from conversation engine
+    def process_speech(self, speech_result: str, call_sid: str = None) -> str:
+        """
+        Process speech input and generate appropriate response
+        
+        Args:
+            speech_result: Transcribed speech from Twilio
+            call_sid: Unique identifier for the call session
+            
+        Returns:
+            TwiML response as string
+        """
+        logger.info(f"Processing speech input: {speech_result}")
+        
+        # Get or create conversation context
+        context = self.conversation_engine.get_or_create_context(call_sid or "default")
+        
+        # Extract entities from speech
+        entities = self.entity_extractor.extract_all(speech_result)
+        logger.debug(f"Extracted entities: {entities}")
+        
+        # Determine intent based on input
+        intent = self.Intent.UNKNOWN
+        
+        # Check if this is a DTMF input (starts with "Option")
+        if speech_result.startswith("Option "):
+            try:
+                dtmf = int(speech_result.split(" ")[1])
+                if dtmf == 1:
+                    intent = self.Intent.AVAILABILITY
+                elif dtmf == 2:
+                    intent = self.Intent.PRICING
+                elif dtmf == 3:
+                    intent = self.Intent.INFORMATION
+            except (ValueError, IndexError):
+                pass
+        else:
+            # Process speech input
+            if 'unit_size' in entities:
+                intent = self.Intent.AVAILABILITY
+            elif 'duration' in entities:
+                intent = self.Intent.PRICING
+            
         # Get response from conversation engine
         response_text = self.conversation_engine.process_intent(
             context.session_id,

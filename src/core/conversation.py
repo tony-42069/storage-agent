@@ -6,6 +6,9 @@ from typing import Dict, List, Optional
 
 from pydantic import BaseModel
 
+import logging
+logger = logging.getLogger('storage_agent.conversation')
+
 
 class Intent(str, Enum):
     """Supported conversation intents."""
@@ -63,15 +66,49 @@ class ConversationContext:
 class ConversationEngine:
     """Core conversation management engine."""
     
-    def __init__(self):
-        """Initialize conversation engine."""
+    def __init__(self, enable_persistence: bool = True):
+        """
+        Initialize conversation engine.
+        
+        Args:
+            enable_persistence: Whether to persist sessions to database
+        """
         self.active_contexts: Dict[str, ConversationContext] = {}
+        self.enable_persistence = enable_persistence
+        
+        if enable_persistence:
+            from src.services.conversation_persistence import conversation_persistence
+            self.persistence = conversation_persistence
+            logger = __import__('src.utils.logger', fromlist=['get_logger']).get_logger(__name__)
+            logger.info("Conversation engine initialized with persistence")
+        else:
+            self.persistence = None
     
     def get_or_create_context(self, session_id: str) -> ConversationContext:
         """Get existing context or create new one."""
         if session_id not in self.active_contexts:
+            if self.persistence:
+                persisted = self.persistence.load_context(session_id)
+                if persisted:
+                    self.active_contexts[session_id] = persisted
+                    return persisted
+            
             self.active_contexts[session_id] = ConversationContext(session_id=session_id)
+        
         return self.active_contexts[session_id]
+    
+    def save_context(self, session_id: str):
+        """Save context to database if persistence is enabled."""
+        if self.persistence and session_id in self.active_contexts:
+            self.persistence.save_context(self.active_contexts[session_id])
+    
+    def end_session(self, session_id: str, summary: Optional[str] = None):
+        """End a conversation session."""
+        if self.persistence:
+            self.persistence.end_session(session_id, summary)
+        
+        if session_id in self.active_contexts:
+            del self.active_contexts[session_id]
     
     def process_intent(
         self,

@@ -3,6 +3,8 @@ import os
 import time
 import uvicorn
 from fastapi import FastAPI, Request
+import uvicorn
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
@@ -11,6 +13,7 @@ from src.routes import voice
 from src.routes import health
 from src.utils.logger import get_logger, init_app_logging
 from src.utils.metrics import record_request, record_error
+from src.utils.logger import get_logger
 from src.db.session import init_database, close_async_engine
 
 logger = get_logger(__name__)
@@ -55,6 +58,8 @@ async def lifespan(app: FastAPI):
     yield
     logger.info("Application shutdown")
     await close_async_engine()
+    yield
+    logger.info("Application shutdown")
 
 
 app = FastAPI(
@@ -63,6 +68,7 @@ app = FastAPI(
     description="AI-powered storage facility management system",
     lifespan=lifespan,
 )
+
 
 # CORS middleware configuration
 app.add_middleware(
@@ -102,6 +108,8 @@ async def metrics_middleware(request: Request, call_next):
     return response
 
 
+
+
 @app.get("/")
 async def root():
     """Root endpoint."""
@@ -111,6 +119,46 @@ async def root():
         "status": "operational"
     }
 
+
+
+# Include routers
+app.include_router(voice.router, prefix="/voice", tags=["voice"])
+
+@app.get("/")
+async def root():
+    """Root endpoint."""
+    return {
+        "name": settings.PROJECT_NAME,
+        "version": settings.VERSION,
+        "status": "operational"
+    }
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint."""
+    import os
+    required_vars = ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_PHONE_NUMBER']
+    missing_vars = [v for v in required_vars if not os.getenv(v)]
+    
+    return {
+        "status": "healthy" if not missing_vars else "degraded",
+        "environment": settings.APP_ENV,
+        "config_valid": len(missing_vars) == 0,
+        "missing_config": missing_vars if missing_vars else None
+    }
+
+
+if __name__ == "__main__":
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=settings.PORT,
+        reload=settings.DEBUG
+    )
+        "environment": settings.ENVIRONMENT,
+        "config_valid": len(missing_vars) == 0,
+        "missing_config": missing_vars if missing_vars else None
+    }
 
 if __name__ == "__main__":
     uvicorn.run(
