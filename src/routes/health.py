@@ -135,13 +135,5 @@ async def prometheus_metrics() -> str:
     
     Returns metrics in Prometheus format.
     """
-    from src.utils.metrics import get_metrics
-    
-    metrics = get_metrics()
-    
-    output = []
-    for metric_name, value in metrics.items():
-        output.append(f"# TYPE {metric_name} gauge")
-        output.append(f"{metric_name} {value}")
-    
-    return "\n".join(output)
+    from src.utils.metrics import get_prometheus_metrics
+    return get_prometheus_metrics()

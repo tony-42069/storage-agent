@@ -8,8 +8,10 @@ from src.core.entities import EntityExtractor
 from src.core.conversation import ConversationEngine, Intent, Entity
 from src.services.storage_service import StorageService
 from src.utils.logger import get_logger
+from src.utils.metrics import start_call, end_call, record_call_input, record_call_error
 
 logger = get_logger(__name__)
+
 
 class TwilioService:
     """Handle Twilio voice interactions and call processing"""
@@ -38,23 +40,36 @@ class TwilioService:
         self.entity_extractor = EntityExtractor()
         self.storage_service = StorageService(facility_id, facility_api_key)
         self.conversation_engine = ConversationEngine()
-        self.Intent = Intent  # Make Intent enum available for use
+        self.Intent = Intent
+        
+        self.voice_action_url = ""  # Will be set if provided
         
         logger.info("Initialized Twilio service with conversation engine")
-
-    def handle_incoming_call(self) -> str:
+    
+    def set_voice_action_url(self, url: str):
+        """Set the voice action URL for TwiML responses."""
+        self.voice_action_url = url
+    
+    def handle_incoming_call(self, call_sid: str = None) -> str:
         """
-        Handle initial incoming call and gather user input
+        Handle initial incoming call and gather user input.
         
+        Args:
+            call_sid: Optional call SID for metrics tracking
+            
         Returns:
             TwiML response as string
         """
+        if call_sid:
+            start_call(call_sid)
+        
         response = VoiceResponse()
+        action_url = self.voice_action_url or "/voice/process"
         
         # Gather speech input
         gather = Gather(
             input='speech dtmf',
-            action='https://happy-waves-lie.loca.lt/voice/process',
+            action=action_url,
             language='en-US',
             enhanced='true',
             speech_timeout='auto',
@@ -82,7 +97,7 @@ class TwilioService:
 
     def process_speech(self, speech_result: str, call_sid: str = None) -> str:
         """
-        Process speech input and generate appropriate response
+        Process speech input and generate appropriate response.
         
         Args:
             speech_result: Transcribed speech from Twilio
@@ -92,6 +107,9 @@ class TwilioService:
             TwiML response as string
         """
         logger.info(f"Processing speech input: {speech_result}")
+        
+        # Determine input type for metrics
+        input_type = "speech" if not speech_result.startswith("Option ") else "dtmf"
         
         # Get or create conversation context
         context = self.conversation_engine.get_or_create_context(call_sid or "default")
@@ -121,7 +139,12 @@ class TwilioService:
                 intent = self.Intent.AVAILABILITY
             elif 'duration' in entities:
                 intent = self.Intent.PRICING
-            
+        
+        # Record input for metrics
+        if call_sid:
+            record_call_input(call_sid, input_type, intent.value if intent else None)
+            record_conversation(call_sid, intent.value if intent else None)
+        
         # Get response from conversation engine
         response_text = self.conversation_engine.process_intent(
             context.session_id,
@@ -131,9 +154,10 @@ class TwilioService:
         )
         
         response = VoiceResponse()
+        action_url = self.voice_action_url or "/voice/process"
         gather = Gather(
             input='speech dtmf',
-            action='https://happy-waves-lie.loca.lt/voice/process',
+            action=action_url,
             language='en-US',
             enhanced='true',
             speech_timeout='auto',
@@ -153,17 +177,22 @@ class TwilioService:
         
         return str(response)
 
-    def handle_error(self, error: Exception) -> str:
+    def handle_error(self, error: Exception, call_sid: str = None) -> str:
         """
-        Generate error response for the user
+        Generate error response for the user.
         
         Args:
             error: Exception that occurred
+            call_sid: Optional call SID for metrics tracking
             
         Returns:
             TwiML response as string
         """
         logger.error(f"Error in call processing: {str(error)}", exc_info=True)
+        
+        if call_sid:
+            record_call_error(call_sid)
+            record_error(type(error).__name__, component="twilio")
         
         response = VoiceResponse()
         response.say(
