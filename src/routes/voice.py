@@ -34,19 +34,22 @@ async def handle_incoming_call(
         TwiML response
     """
     try:
-        # Get request form data and headers
         form_data = await request.form()
         signature = request.headers.get("X-Twilio-Signature", "")
-        
-        # Temporarily disable signature validation for testing
-        logger.info("Skipping signature validation for testing")
-        
-        # Generate initial response
+        request_url = str(request.url)
+
+        if os.getenv("APP_ENV") == "production":
+            if not twilio.validate_request(dict(form_data), request_url, signature):
+                logger.warning("Twilio signature validation failed")
+                raise HTTPException(status_code=403, detail="Invalid request signature")
+
         response = twilio.handle_incoming_call()
         logger.info(f"Handled incoming call from {form_data.get('From')}")
         
         return Response(content=response, media_type="application/xml")
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error handling incoming call: {e}", exc_info=True)
         return twilio.handle_error(e)
@@ -67,14 +70,15 @@ async def process_speech(
         TwiML response
     """
     try:
-        # Get request form data and headers
         form_data = await request.form()
         signature = request.headers.get("X-Twilio-Signature", "")
-        
-        # Temporarily disable signature validation for testing
-        logger.info("Skipping signature validation for testing")
-        
-        # Get input result (speech or DTMF)
+        request_url = str(request.url)
+
+        if os.getenv("APP_ENV") == "production":
+            if not twilio.validate_request(dict(form_data), request_url, signature):
+                logger.warning("Twilio signature validation failed")
+                raise HTTPException(status_code=403, detail="Invalid request signature")
+
         speech_result = form_data.get('SpeechResult')
         dtmf_result = form_data.get('Digits')
         call_sid = form_data.get('CallSid')
@@ -83,13 +87,14 @@ async def process_speech(
             logger.warning("No input received")
             raise HTTPException(status_code=400, detail="No input received")
         
-        # Process input and generate response
         input_text = speech_result if speech_result else f"Option {dtmf_result}"
         response = twilio.process_speech(input_text, call_sid)
         logger.info(f"Processed speech input for call {call_sid}: {speech_result[:100]}...")
         
         return Response(content=response, media_type="application/xml")
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error processing speech: {e}", exc_info=True)
         return Response(content=twilio.handle_error(e), media_type="application/xml")
