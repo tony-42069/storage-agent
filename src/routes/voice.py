@@ -15,7 +15,8 @@ def get_twilio_service() -> TwilioService:
     return TwilioService(
         account_sid=os.getenv('TWILIO_ACCOUNT_SID'),
         auth_token=os.getenv('TWILIO_AUTH_TOKEN'),
-        phone_number=os.getenv('TWILIO_PHONE_NUMBER')
+        phone_number=os.getenv('TWILIO_PHONE_NUMBER'),
+        voice_action_url=os.getenv('TWILIO_VOICE_ACTION_URL', '')
     )
 
 @router.post("/incoming")
